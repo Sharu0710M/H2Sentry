@@ -1,0 +1,335 @@
+//yitedir146@hiredify.com
+//Qwerty@123
+
+#define BLYNK_TEMPLATE_ID "TMPL3XG77HXyd"
+#define BLYNK_TEMPLATE_NAME "gas detector"
+#define BLYNK_AUTH_TOKEN "QQ5l9SeqyD-6CBaBk0qhZb4j7oyTy7MF"
+
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+#include <DHT.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+char ssid[] = "IDEAZONE4G";
+char pass[] = "8074744190";
+
+// ==================================================
+// PIN DEFINITIONS
+// ==================================================
+
+#define DHT_PIN D3
+#define DHT_TYPE DHT11
+
+#define GAS_SENSOR A0
+#define BUZZER_PIN D5
+
+// OLED
+#define OLED_SDA D2
+#define OLED_SCL D1
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+
+#define OLED_RESET -1
+#define OLED_ADDRESS 0x3C
+
+
+// ==================================================
+// OBJECTS
+// ==================================================
+
+DHT dht(DHT_PIN, DHT_TYPE);
+
+BlynkTimer timer;
+
+Adafruit_SSD1306 display(
+  SCREEN_WIDTH,
+  SCREEN_HEIGHT,
+  &Wire,
+  OLED_RESET
+);
+
+
+// ==================================================
+// GAS ALERT STATE
+// ==================================================
+
+bool gasAlertActive = false;
+
+
+// ==================================================
+// SENSOR READING FUNCTION
+// ==================================================
+
+void readSensors()
+{
+  // ------------------------------------------------
+  // DHT11
+  // ------------------------------------------------
+
+  float humidity = dht.readHumidity();
+  float temperature = dht.readTemperature();
+
+
+  // ------------------------------------------------
+  // MQ-2
+  // ------------------------------------------------
+
+  int gasRaw = analogRead(GAS_SENSOR);
+
+  // Convert sensor value to 0-80 ppm
+  int gasPPM = map(gasRaw, 0, 1024, 0, 80);
+
+  gasPPM = constrain(gasPPM, 0, 80);
+
+
+  // =================================================
+  // SERIAL MONITOR
+  // =================================================
+
+  Serial.println();
+  Serial.println("---------------------------------------");
+
+  if (isnan(humidity) || isnan(temperature))
+  {
+    Serial.println("DHT11: SENSOR ERROR");
+  }
+  else
+  {
+    Serial.print("Humidity    : ");
+    Serial.print(humidity);
+    Serial.println(" %");
+
+    Serial.print("Temperature : ");
+    Serial.print(temperature);
+    Serial.println(" C");
+
+    // Send to Blynk
+    Blynk.virtualWrite(V0, humidity);
+    Blynk.virtualWrite(V1, temperature);
+  }
+
+
+  Serial.print("Gas Raw     : ");
+  Serial.println(gasRaw);
+
+  Serial.print("Gas Value   : ");
+  Serial.print(gasPPM);
+  Serial.println(" ppm");
+
+
+  // Send gas value to Blynk
+  Blynk.virtualWrite(V2, gasPPM);
+
+
+  // =================================================
+  // GAS ALERT
+  // =================================================
+
+  if (gasPPM > 50)
+  {
+    Serial.println("Gas Status  : GAS DETECTED");
+
+    // Buzzer ON
+    digitalWrite(BUZZER_PIN, HIGH);
+
+
+    // Send notification only once
+    if (!gasAlertActive)
+    {
+      Blynk.logEvent(
+        "gas_detected",
+        "WARNING! Gas level is above 50 ppm."
+      );
+
+      gasAlertActive = true;
+
+      Serial.println("Blynk Alert : gas_detected SENT");
+    }
+  }
+  else
+  {
+    Serial.println("Gas Status  : NORMAL");
+
+    // Buzzer OFF
+    digitalWrite(BUZZER_PIN, LOW);
+
+    // Reset alert
+    gasAlertActive = false;
+  }
+
+
+  // =================================================
+  // OLED DISPLAY
+  // =================================================
+
+  display.clearDisplay();
+
+  display.setTextColor(SSD1306_WHITE);
+
+
+  // -------------------------------------------------
+  // LINE 1
+  // -------------------------------------------------
+
+  display.setTextSize(2);
+  display.setCursor(0, 0);
+
+  if (gasPPM > 50)
+  {
+    display.println("GAS ALERT");
+  }
+  else
+  {
+    display.println("GAS STATUS");
+  }
+
+
+  // -------------------------------------------------
+  // LINE 2 - GAS PPM
+  // -------------------------------------------------
+
+  display.setTextSize(3);
+  display.setCursor(0, 28);
+
+  display.print(gasPPM);
+
+  display.setTextSize(2);
+  display.print(" ppm");
+
+
+  // Show display
+  display.display();
+
+
+  Serial.println("---------------------------------------");
+}
+
+
+// ==================================================
+// SETUP
+// ==================================================
+
+void setup()
+{
+  Serial.begin(115200);
+
+
+  // =================================================
+  // BUZZER
+  // =================================================
+
+  pinMode(BUZZER_PIN, OUTPUT);
+
+  digitalWrite(BUZZER_PIN, LOW);
+
+
+  // =================================================
+  // DHT11
+  // =================================================
+
+  dht.begin();
+
+
+  // =================================================
+  // OLED
+  // =================================================
+
+  // I2C:
+  // SDA = D2
+  // SCL = D1
+
+  Wire.begin(OLED_SDA, OLED_SCL);
+
+
+  Serial.println("Starting OLED...");
+
+
+  if (!display.begin(
+        SSD1306_SWITCHCAPVCC,
+        OLED_ADDRESS))
+  {
+    Serial.println("OLED NOT FOUND!");
+
+    while (1)
+    {
+      delay(1000);
+    }
+  }
+
+
+  Serial.println("OLED FOUND!");
+
+
+  // Startup screen
+  display.clearDisplay();
+
+  display.setTextColor(SSD1306_WHITE);
+
+  display.setTextSize(2);
+
+  display.setCursor(10, 10);
+  display.println("GAS");
+
+  display.setCursor(10, 35);
+  display.println("DETECTOR");
+
+  display.display();
+
+  delay(2000);
+
+
+  // =================================================
+  // SERIAL STARTUP INFORMATION
+  // =================================================
+
+  Serial.println();
+  Serial.println("======================================");
+  Serial.println("       GAS DETECTOR IoT SYSTEM");
+  Serial.println("======================================");
+
+  Serial.println("DHT11 DATA : D3");
+  Serial.println("MQ-2 AO    : A0");
+  Serial.println("BUZZER     : D5");
+
+  Serial.println("OLED SDA   : D2");
+  Serial.println("OLED SCL   : D1");
+
+  Serial.println("--------------------------------------");
+
+
+  // =================================================
+  // BLYNK
+  // =================================================
+
+  Serial.println("Connecting to Blynk...");
+
+  Blynk.begin(
+    BLYNK_AUTH_TOKEN,
+    ssid,
+    pass
+  );
+
+  Serial.println("Blynk Connected!");
+  Serial.println("System Ready");
+
+  Serial.println("--------------------------------------");
+
+
+  // Read sensors every 2 seconds
+  timer.setInterval(2000L, readSensors);
+}
+
+
+// ==================================================
+// LOOP
+// ==================================================
+
+void loop()
+{
+  Blynk.run();
+
+  timer.run();
+}
