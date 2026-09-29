@@ -1,0 +1,15 @@
+{
+  "short_name": "H2S GUARD",
+  "name": "H2S Exposure Monitoring & Worker Safety Platform",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#0e7490",
+  "background_color": "#f8fafc"
+}

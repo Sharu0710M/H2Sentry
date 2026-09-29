@@ -1,0 +1,33 @@
+
+import axios from 'axios';
+export const captureCameraSnapshot = async (req: Request, res: Response) => {
+  try {
+    const { streamIp } = req.body;
+    if (!streamIp) return res.status(400).json({ message: 'streamIp required' });
+    const baseUrl = streamIp.startsWith('http') ? streamIp.split(':81')[0] : `http://${streamIp}`;
+    const imgRes = await axios.get(`${baseUrl}/capture`, { responseType: 'arraybuffer' });
+    const base64 = Buffer.from(imgRes.data, 'binary').toString('base64');
+    const imageUrl = `data:image/jpeg;base64,${base64}`;
+
+    // Mock AI analysis for hackathon demo
+    const latestReading = await SensorReading.findOne().sort({ timestamp: -1 });
+    const h2s = latestReading ? latestReading.h2s : 0;
+    let classification = 'NORMAL';
+    let color = 'White/Grey';
+    if (h2s > 50) { classification = 'HIGH'; color = 'Dark Brown/Black'; }
+    else if (h2s > 20) { classification = 'MODERATE'; color = 'Light Brown'; }
+    else if (h2s > 10) { classification = 'SLIGHT'; color = 'Tan'; }
+
+    const newImage = await StripImage.create({
+      deviceId: latestReading ? latestReading.deviceId : 'ESP32-CAM',
+      imageUrl,
+      classification,
+      confidence: 85 + Math.floor(Math.random() * 10),
+      detectedColor: color,
+      associatedH2s: h2s
+    });
+    res.status(201).json(newImage);
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+};
